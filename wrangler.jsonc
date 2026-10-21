@@ -24,7 +24,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "database",
+      "database_name": "d1-local-con-drizzle",
       "database_id": "",
       "migrations_dir": "drizzle"
     }
