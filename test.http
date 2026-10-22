@@ -1,0 +1,48 @@
+@urlBase = http://localhost:8787/api
+@Content-Type = application/json
+
+// MOVEMENT TYPE
+
+// list all
+{{urlBase}}/movement-type
+
+### 
+
+// list id
+
+{{urlBase}}/movement-type/ENTRy
+
+###
+
+// LOCATION
+
+// list all
+{{urlBase}}/locations
+###
+// list id
+{{urlBase}}/locations/0
+
+###
+
+// PRODUCT
+
+// crearte
+POST {{urlBase}}/products  HTTP/1.1
+Content-Type: {{Content-Type}}
+
+{
+    "sku": "gif030ycii"
+}
+###
+// list all
+{{urlBase}}/products
+
+###
+
+// list id
+{{urlBase}}/products/SAD040m
+
+###
+
+// delete
+DELETE {{urlBase}}/products/GIF030YCII
