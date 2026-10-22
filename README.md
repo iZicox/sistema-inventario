@@ -123,10 +123,10 @@ Todas las rutas se montan bajo el prefijo `/api`.
 | `GET` | `/products` | Implementada | Lista los productos |
 | `GET` | `/products/:sku` | Implementada | Obtiene un producto por SKU |
 | `DELETE` | `/products/:sku` | Implementada | Elimina un producto |
-| `POST` | `/movements` | Parcial | Crea un movimiento y actualiza el stock |
+| `POST` | `/movements` | Implementada | Crea un movimiento y actualiza el stock |
 | `GET` | `/movements` | Implementada | Lista el historial de movimientos |
-| `GET` | `/movements/:id` | Parcial | Obtiene un movimiento por id |
-| `GET` | `/movements/location/:id` | Pendiente | Lista los movimientos de una ubicación |
+| `GET` | `/movements/:id` | Implementada | Obtiene un movimiento por id |
+| `GET` | `/movements/location/:id` | Implementada | Lista los movimientos de una ubicación |
 | `GET` | `/movements/product/:id` | Pendiente | Lista los movimientos de un producto |
 | `GET` | `/stock` | Pendiente | Consulta el stock actual |
 | `GET` | `/stock/product/:id` | Pendiente | Consulta el stock de un producto |
@@ -135,7 +135,7 @@ Todas las rutas se montan bajo el prefijo `/api`.
 | `POST` | `/stock/recalculate` | Pendiente | Reconstruye el stock desde el historial |
 | `POST` | `/movements/transfer` | Pendiente | Registra una transferencia entre ubicaciones |
 
-> El estado «Parcial» indica que la ruta existe pero todavía no cumple por completo el contrato descrito en este documento. Consulta la sección [Estado actual y pendientes](#estado-actual-y-pendientes).
+> Las rutas marcadas como «Pendiente» todavía no están implementadas. Consulta la sección [Estado actual y pendientes](#estado-actual-y-pendientes).
 
 ---
 
@@ -177,8 +177,8 @@ Crea un producto.
 
 - Recibe el SKU.
 - Valida formato, lo normaliza y comprueba que no esté duplicado.
+- Si el SKU ya existe responde `409`, no un error genérico.
 - Devuelve el producto creado.
-- Si el SKU ya existe debe responder conflicto, no un error genérico.
 
 ### `GET /products`
 
@@ -186,7 +186,7 @@ Lista productos.
 
 - Solo catálogo; no calcula stock.
 - Conviene paginar y ordenar.
-- Si no hay productos, hay que decidir si se devuelve una lista vacía o un «no hay productos»; hoy el proyecto es inconsistente en eso.
+- Si no hay productos devuelve una lista vacía (`200 []`).
 
 ### `GET /products/:sku`
 
@@ -204,6 +204,7 @@ Borra un producto.
   - rechazar la operación con un conflicto, o
   - hacer un borrado lógico para no perder trazabilidad.
 - En un inventario serio, el borrado lógico suele ser la mejor opción.
+- Hoy responde `409` si el producto tiene movimientos o stock asociado.
 
 ---
 
@@ -239,8 +240,7 @@ Lista el historial de movimientos.
 
 - No calcula stock; solo muestra lo que pasó.
 - Debería permitir filtrar por producto, ubicación, tipo y rango de fechas.
-- Debería ordenar de más reciente a más antiguo.
-- Conviene paginar.
+- Hoy ordena de más reciente a más antiguo. Pendiente: filtros y paginación.
 - Como el historial es inmutable, es solo lectura.
 
 ### `GET /movements/:id`
@@ -386,11 +386,25 @@ test.http                  # Ejemplos de peticiones
 
 ## Estado actual y pendientes
 
-- La ruta actual es `POST /movement` (singular); el contrato recomendado es `POST /movements`. Además, solo inserta el movimiento: **todavía no actualiza el stock**.
-- La tabla `stock` no tiene todavía la restricción que impide cantidades negativas.
-- `GET /movements/:id` devuelve una lista en lugar de un objeto y no distingue correctamente el caso «no encontrado».
-- `GET /movements/location/:id` está declarada pero no tiene controlador.
-- Faltan las rutas de stock.
-- Falta ordenación y paginación en los listados.
-- Falta proteger las rutas de escritura con autenticación.
-- Falta crear la base de datos D1 remota y configurar `database_id`.
+Implementado:
+
+- `POST /movements` registra el movimiento y actualiza el stock en un único batch atómico de D1. Si el stock quedaría negativo, el `CHECK` de la tabla aborta el batch completo y se responde `409`.
+- `stock.quantity` tiene `CHECK (quantity >= 0)` y `movement.quantity` tiene `CHECK (quantity > 0)`.
+- `GET /movements/:id` devuelve un objeto y responde `404` si no existe.
+- `GET /movements/location/:id` valida la ubicación y devuelve el historial ordenado.
+- `GET /movements` ordena de más reciente a más antiguo.
+- `POST /products` responde `409` si el SKU ya existe.
+- `DELETE /products/:sku` responde `409` si el producto tiene movimientos o stock asociado.
+- Los errores de D1 (`UNIQUE`, `FOREIGN KEY`, `CHECK`) se traducen a respuestas JSON con `409` mediante `app.onError`.
+- `npm run db:seed:local` es idempotente.
+
+Pendiente:
+
+- Rutas de stock (`GET /stock`, por producto, por ubicación, por combinación).
+- `GET /movements/product/:id`.
+- Filtros y paginación en los listados.
+- `POST /movements/transfer` y `POST /stock/recalculate`.
+- Idempotencia en `POST /movements` para reintentos del cliente.
+- Proteger las escrituras con autenticación.
+- Crear la base de datos D1 remota y configurar `database_id`.
+- Unificar `movement.movementTypeCode` a snake_case (`movement_type_code`) en una migración futura.
