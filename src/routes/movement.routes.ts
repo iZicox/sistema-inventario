@@ -3,6 +3,7 @@ import { Env } from "../types";
 import { zValidator } from "@hono/zod-validator";
 import { createMovementSchema, idIntSchema } from "../validators";
 import { getDb } from "../db/client";
+import { errorMessage } from "../db/errors";
 import { location, movement, movementType, product, stock } from "../db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -10,7 +11,7 @@ const movementRoute = new Hono<Env>()
 
 // insert
 movementRoute.post(
-    '/movement', 
+    '/movements', 
     zValidator('json', createMovementSchema), 
     async (c) => {
         const body = c.req.valid('json')
@@ -91,7 +92,7 @@ movementRoute.post(
 
             return c.json({ movement: row, stock: stockRows[0] }, 201)
         } catch (e) {
-            const message = e instanceof Error ? e.message : ''
+            const message = errorMessage(e)
 
             if(
                 message.includes('CHECK constraint failed') ||
@@ -108,7 +109,10 @@ movementRoute.post(
 movementRoute.get('/movements', async (c) => {
     const db = getDb(c.env.DB)
 
-    const rows = await db.select().from(movement)
+    const rows = await db
+        .select()
+        .from(movement)
+        .orderBy(desc(movement.createdAt), desc(movement.id))
 
     return c.json(rows)
 })

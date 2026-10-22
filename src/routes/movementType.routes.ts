@@ -20,7 +20,7 @@ movementTypeRoute.get('/movement-type', async (c) => {
     return c.json(rows)
 })
 
-// listar por id
+// listar por código
 movementTypeRoute.get('/movement-type/:code',zValidator('param', movementTypeCodeSchema), async (c) => {
   const { code } = c.req.valid('param')
   const db = getDb(c.env.DB)
