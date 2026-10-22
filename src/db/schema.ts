@@ -72,6 +72,7 @@ export const movement = sqliteTable(
         index('idx_movement_product').on(table.productId, table.createdAt),
         index('idx_movement_location').on(table.locationId, table.createdAt),
         index('idx_movement_type').on(table.movementTypeCode, table.createdAt),
+        check('movement_quantity_positive', sql`${table.quantity} > 0`),
     ]
 );
 

@@ -1,9 +1,9 @@
 -- Ubicación única del MVP
-insert into location ( code ) values
+insert or ignore into location ( code ) values
    ( 'WAREHOUSE' );
 
 -- Catálogo de tipos. Los 6 del MVP + los de fase 2/3 listos para usar.
-insert into movement_type (
+insert or ignore into movement_type (
    code,
    description,
    sign

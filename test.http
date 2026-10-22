@@ -1,48 +1,101 @@
 @urlBase = http://localhost:8787/api
-@Content-Type = application/json
+@contentType = application/json
+
+// Ajustá productId/locationId a los ids devueltos por los catálogos.
+@productId = 4
+@locationId = 1
 
 // MOVEMENT TYPE
 
 // list all
-{{urlBase}}/movement-type
+GET {{urlBase}}/movement-type
 
-### 
+###
 
-// list id
-
-{{urlBase}}/movement-type/ENTRy
+// get by code (se normaliza a mayúsculas)
+GET {{urlBase}}/movement-type/ENTRy
 
 ###
 
 // LOCATION
 
 // list all
-{{urlBase}}/locations
+GET {{urlBase}}/locations
+
 ###
-// list id
-{{urlBase}}/locations/0
+
+// get by id (entero positivo)
+GET {{urlBase}}/locations/1
 
 ###
 
 // PRODUCT
 
-// crearte
-POST {{urlBase}}/products  HTTP/1.1
-Content-Type: {{Content-Type}}
+// create
+POST {{urlBase}}/products HTTP/1.1
+Content-Type: {{contentType}}
 
 {
     "sku": "gif030ycii"
 }
+
 ###
+
 // list all
-{{urlBase}}/products
+GET {{urlBase}}/products
 
 ###
 
-// list id
-{{urlBase}}/products/SAD040m
+// get by sku
+GET {{urlBase}}/products/GIF030YCII
 
 ###
 
-// delete
+// delete (409 si tiene movimientos o stock asociado)
 DELETE {{urlBase}}/products/GIF030YCII
+
+###
+
+// MOVEMENT
+
+// create entry
+POST {{urlBase}}/movements HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+    "productId": {{productId}},
+    "locationId": {{locationId}},
+    "movementTypeCode": "ENTRY",
+    "quantity": 10,
+    "note": "compra"
+}
+
+###
+
+// create exit (409 si el stock quedaría negativo)
+POST {{urlBase}}/movements HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+    "productId": {{productId}},
+    "locationId": {{locationId}},
+    "movementTypeCode": "EXIT",
+    "quantity": 3
+}
+
+###
+
+// list all (más reciente primero)
+GET {{urlBase}}/movements
+
+###
+
+// get by id
+GET {{urlBase}}/movements/1
+
+###
+
+// list by location
+GET {{urlBase}}/movements/location/{{locationId}}
+
+###
