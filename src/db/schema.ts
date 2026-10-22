@@ -4,6 +4,7 @@ import {
     integer,
     primaryKey,
     index,
+    check,
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
@@ -94,5 +95,6 @@ export const stock = sqliteTable(
     },
     (table) => [
         primaryKey({ columns: [table.productId, table.locationId] }),
+        check('stock_quantity_non_negative', sql`${table.quantity} >= 0`),
     ]
 );
