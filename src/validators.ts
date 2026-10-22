@@ -1,8 +1,7 @@
 import z from "zod";
-import { product } from "./db/schema";
 
 export const movementTypeCodeSchema = z.object({
-    code: z.string().trim().toUpperCase()
+    code: z.string().trim().min(1, "código es obligatorio").toUpperCase()
 })
 
 export const idIntSchema = z.object({
@@ -22,9 +21,9 @@ export const skuSchema = z.object({
 export const createMovementSchema = z.object({
     productId: z.coerce.number().int().positive(),
     locationId: z.coerce.number().int().positive(),
-    movementTypeCode: z.string().trim().toUpperCase(),
+    movementTypeCode: z.string().trim().min(1, "tipo de movimiento es obligatorio").toUpperCase(),
     quantity: z.coerce.number().int().positive(),
-    note: z.string().optional()
+    note: z.string().max(500, "note admite como máximo 500 caracteres").optional()
 })
 
 
