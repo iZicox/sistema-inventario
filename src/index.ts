@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { Env } from './types'
 import movementTypeRoute from './routes/movementType.routes'
 import locationRoute from './routes/location.routes'
@@ -12,6 +13,15 @@ const app = new Hono<Env>()
 
 app.onError((err, c) => {
     console.error(err)
+
+    // Hono lanza HTTPException para errores de la petición (por ejemplo,
+    // JSON malformado). Hay que respetar su status en vez de devolver 500.
+    if (err instanceof HTTPException) {
+        return c.json(
+            {error: err.status === 400 ? 'solicitud inválida' : err.message},
+            err.status
+        )
+    }
 
     const message = errorMessage(err)
 
