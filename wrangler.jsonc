@@ -25,7 +25,7 @@
     {
       "binding": "DB",
       "database_name": "d1-local-con-drizzle",
-      "database_id": "",
+      "database_id": "7454db87-2f84-4432-97c8-86ecc48bc974",
       "migrations_dir": "drizzle"
     }
   ],

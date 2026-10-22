@@ -99,3 +99,30 @@ GET {{urlBase}}/movements/1
 GET {{urlBase}}/movements/location/{{locationId}}
 
 ###
+
+// STOCK
+
+// list all (filtros opcionales: ?productId=..&locationId=..)
+GET {{urlBase}}/stock
+
+###
+
+// stock de un producto en todas las ubicaciones
+GET {{urlBase}}/stock/product/{{productId}}
+
+###
+
+// stock de una ubicación
+GET {{urlBase}}/stock/location/{{locationId}}
+
+###
+
+// stock de un producto en una ubicación
+GET {{urlBase}}/stock/{{productId}}/{{locationId}}
+
+###
+
+// reconstruir el stock desde los movimientos
+POST {{urlBase}}/stock/recalculate
+
+###

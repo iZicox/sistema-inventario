@@ -30,16 +30,18 @@ npm run dev
 
 La API queda disponible en `http://localhost:8787/api`.
 
-### Base de datos local
+### Base de datos
 
 | Comando | Qué hace |
 |---|---|
 | `npm run db:generate` | Genera una migración a partir de `src/db/schema.ts` |
 | `npm run db:apply:local` | Aplica las migraciones pendientes en D1 local |
-| `npm run db:seed:local` | Carga los catálogos iniciales de `seed.sql` |
+| `npm run db:seed:local` | Carga los catálogos iniciales de `seed.sql` en local |
 | `npm run db:reset:local` | Borra el estado local, aplica migraciones y ejecuta el seed |
 | `npm run db:list:local` | Lista las migraciones aplicadas en local |
 | `npm run db:apply:remote` | Aplica las migraciones en D1 remoto |
+| `npm run db:list:remote` | Lista las migraciones aplicadas en D1 remoto |
+| `npm run db:seed:remote` | Carga los catálogos iniciales de `seed.sql` en remoto |
 
 El seed crea la ubicación `WAREHOUSE` y los tipos de movimiento del MVP:
 
@@ -58,7 +60,16 @@ El seed crea la ubicación `WAREHOUSE` y los tipos de movimiento del MVP:
 npm run deploy
 ```
 
-Antes de desplegar hay que crear la base de datos D1 en Cloudflare y rellenar `database_id` en `wrangler.jsonc`. Actualmente el binding `DB` apunta a la base `d1-local-con-drizzle` con `database_id` vacío.
+La API está desplegada en:
+
+- **Producción:** https://sistema-inventario.lifud-iberia.workers.dev
+- **Base D1:** `d1-local-con-drizzle` (`7454db87-2f84-4432-97c8-86ecc48bc974`, región WEUR)
+
+El binding `DB` de `wrangler.jsonc` ya apunta a esa base. Para aplicar migraciones al entorno remoto:
+
+```bash
+npm run db:apply:remote
+```
 
 ### Tipos de Cloudflare
 
@@ -128,11 +139,11 @@ Todas las rutas se montan bajo el prefijo `/api`.
 | `GET` | `/movements/:id` | Implementada | Obtiene un movimiento por id |
 | `GET` | `/movements/location/:id` | Implementada | Lista los movimientos de una ubicación |
 | `GET` | `/movements/product/:id` | Pendiente | Lista los movimientos de un producto |
-| `GET` | `/stock` | Pendiente | Consulta el stock actual |
-| `GET` | `/stock/product/:id` | Pendiente | Consulta el stock de un producto |
-| `GET` | `/stock/location/:id` | Pendiente | Consulta el stock de una ubicación |
-| `GET` | `/stock/:productId/:locationId` | Pendiente | Consulta el stock de un producto en una ubicación |
-| `POST` | `/stock/recalculate` | Pendiente | Reconstruye el stock desde el historial |
+| `GET` | `/stock` | Implementada | Consulta el stock actual |
+| `GET` | `/stock/product/:id` | Implementada | Consulta el stock de un producto |
+| `GET` | `/stock/location/:id` | Implementada | Consulta el stock de una ubicación |
+| `GET` | `/stock/:productId/:locationId` | Implementada | Consulta el stock de un producto en una ubicación |
+| `POST` | `/stock/recalculate` | Implementada | Reconstruye el stock desde el historial |
 | `POST` | `/movements/transfer` | Pendiente | Registra una transferencia entre ubicaciones |
 
 > Las rutas marcadas como «Pendiente» todavía no están implementadas. Consulta la sección [Estado actual y pendientes](#estado-actual-y-pendientes).
@@ -273,23 +284,50 @@ Lista el historial de un producto.
 
 ### `GET /stock`
 
-Devuelve el stock actual de cada combinación producto–ubicación.
+Devuelve el stock actual de cada combinación producto–ubicación, incluyendo las filas con cantidad cero.
 
-- Lee la tabla de stock, no recalcula todo el historial.
-- Debería incluir datos legibles: SKU del producto, código de la ubicación, cantidad y fecha de actualización.
-- Puede aceptar filtros por producto o por ubicación.
+- Lee la tabla `stock`, no recalcula el historial.
+- Incluye datos legibles: `productId`, `sku`, `locationId`, `locationCode`, `quantity` y `updatedAt`.
+- Acepta filtros opcionales por query string: `?productId=1`, `?locationId=1` o ambos.
+- Ordena por SKU y código de ubicación.
 - Solo lectura.
 
-Semántica a decidir: ¿se muestran solo productos con movimientos, o también productos con stock cero? Para un panel de inventario suele ser mejor mostrar también los ceros, aunque eso requiere otro enfoque de consulta.
+```json
+[
+  {
+    "productId": 1,
+    "sku": "ABC-001",
+    "locationId": 1,
+    "locationCode": "WAREHOUSE",
+    "quantity": 10,
+    "updatedAt": "2026-10-22 12:00:00"
+  }
+]
+```
 
 ### `GET /stock/product/:id`
 
 Devuelve el stock de un producto en todas sus ubicaciones.
 
-- Útil para ver «cuánto hay de este producto y dónde».
-- Puede incluir el total sumando ubicaciones.
-- Si el producto no existe, «no encontrado».
-- Si existe pero no tiene movimientos, la respuesta natural es una lista vacía o cantidad cero, no un error.
+- Incluye el total sumando las ubicaciones.
+- Si el producto no existe, responde `404`.
+- Si existe pero no tiene stock, devuelve `total: 0` y `locations: []`.
+
+```json
+{
+  "productId": 1,
+  "sku": "ABC-001",
+  "total": 10,
+  "locations": [
+    {
+      "locationId": 1,
+      "locationCode": "WAREHOUSE",
+      "quantity": 10,
+      "updatedAt": "2026-10-22 12:00:00"
+    }
+  ]
+}
+```
 
 ### `GET /stock/location/:id`
 
@@ -297,23 +335,68 @@ Devuelve todo el stock de una ubicación.
 
 - Responde «qué hay físicamente en este almacén».
 - Es distinto de `GET /movements/location/:id`, que responde «qué se movió en este almacén».
+- Si la ubicación no existe, responde `404`.
+
+```json
+{
+  "locationId": 1,
+  "code": "WAREHOUSE",
+  "total": 10,
+  "products": [
+    {
+      "productId": 1,
+      "sku": "ABC-001",
+      "quantity": 10,
+      "updatedAt": "2026-10-22 12:00:00"
+    }
+  ]
+}
+```
 
 ### `GET /stock/:productId/:locationId`
 
 Devuelve el stock de un producto en una ubicación concreta.
 
-- Si no hay fila de stock, hay que decidir si se devuelve cero o «no encontrado».
-- Conceptualmente, «no hay stock registrado» no equivale a «no existe la combinación».
-- Para un cliente suele ser más cómodo recibir cero.
+- Si no hay fila de stock, devuelve `quantity: 0` y `updatedAt: null`, no `404`.
+- Si el producto o la ubicación no existen, responde `404`.
+
+```json
+{
+  "productId": 1,
+  "sku": "ABC-001",
+  "locationId": 1,
+  "locationCode": "WAREHOUSE",
+  "quantity": 10,
+  "updatedAt": "2026-10-22 12:00:00"
+}
+```
 
 ### `POST /stock/recalculate`
 
 Reconstruye el stock a partir de todo el historial de movimientos.
 
-- No es una ruta de uso normal.
-- Sirve para reparar desincronizaciones, tras importaciones manuales o cambios de lógica.
-- Debería comparar el stock calculado con el guardado y corregir diferencias.
-- Debería estar protegida; no es algo que un usuario normal ejecute.
+- Borra la tabla `stock` y la vuelve a calcular desde `movement` y `movement_type`.
+- Usa un batch atómico de D1: si falla, no se aplica ningún cambio.
+- Conserva las filas con cantidad cero que tengan movimientos asociados.
+- Devuelve las filas reconstruidas y la cantidad de filas generadas.
+- No es una ruta de uso normal; sirve para reparar desincronizaciones.
+- **No está protegida actualmente**; no debería quedar expuesta sin autenticación en producción.
+
+```json
+{
+  "recalculated": 1,
+  "stock": [
+    {
+      "productId": 1,
+      "sku": "ABC-001",
+      "locationId": 1,
+      "locationCode": "WAREHOUSE",
+      "quantity": 10,
+      "updatedAt": "2026-10-22 12:00:00"
+    }
+  ]
+}
+```
 
 ---
 
@@ -373,7 +456,8 @@ src/
 │   ├── location.routes.ts
 │   ├── movement.routes.ts
 │   ├── movementType.routes.ts
-│   └── product.routes.ts
+│   ├── product.routes.ts
+│   └── stock.routes.ts
 ├── index.ts               # Registro de rutas
 ├── types.ts               # Tipos de los bindings
 └── validators.ts          # Esquemas de validación con Zod
@@ -393,18 +477,20 @@ Implementado:
 - `GET /movements/:id` devuelve un objeto y responde `404` si no existe.
 - `GET /movements/location/:id` valida la ubicación y devuelve el historial ordenado.
 - `GET /movements` ordena de más reciente a más antiguo.
+- `GET /stock` lista el stock con filtros opcionales por producto y ubicación.
+- `GET /stock/product/:id`, `GET /stock/location/:id` y `GET /stock/:productId/:locationId` consultan el stock por producto, ubicación o combinación.
+- `POST /stock/recalculate` reconstruye el stock desde los movimientos en un batch atómico de D1.
 - `POST /products` responde `409` si el SKU ya existe.
 - `DELETE /products/:sku` responde `409` si el producto tiene movimientos o stock asociado.
 - Los errores de D1 (`UNIQUE`, `FOREIGN KEY`, `CHECK`) se traducen a respuestas JSON con `409` mediante `app.onError`.
+- Las peticiones con JSON malformado o body vacío responden `400` mediante el manejo de `HTTPException`.
 - `npm run db:seed:local` es idempotente.
 
 Pendiente:
 
-- Rutas de stock (`GET /stock`, por producto, por ubicación, por combinación).
 - `GET /movements/product/:id`.
-- Filtros y paginación en los listados.
-- `POST /movements/transfer` y `POST /stock/recalculate`.
+- Filtros y paginación en los listados de movimientos.
+- `POST /movements/transfer`.
 - Idempotencia en `POST /movements` para reintentos del cliente.
-- Proteger las escrituras con autenticación.
-- Crear la base de datos D1 remota y configurar `database_id`.
+- Proteger las escrituras y `POST /stock/recalculate` con autenticación.
 - Unificar `movement.movementTypeCode` a snake_case (`movement_type_code`) en una migración futura.

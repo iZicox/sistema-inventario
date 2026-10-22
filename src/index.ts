@@ -5,6 +5,7 @@ import movementTypeRoute from './routes/movementType.routes'
 import locationRoute from './routes/location.routes'
 import productRoute from './routes/product.routes'
 import movementRoute from './routes/movement.routes'
+import stockRoute from './routes/stock.routes'
 import { errorMessage } from './db/errors'
 
 
@@ -49,5 +50,7 @@ app.route('/api', locationRoute)
 app.route('/api', productRoute)
 
 app.route('/api', movementRoute)
+
+app.route('/api', stockRoute)
 
 export default app
