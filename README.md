@@ -21,14 +21,34 @@ El proyecto separa dos conceptos:
 
 ---
 
+## Variables de entorno
+
+Los datos privados se guardan en `.env`, que está ignorado por git. Usa `.env.example` como plantilla:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Uso |
+|---|---|
+| `D1_DATABASE_NAME` | Nombre de la base D1 |
+| `D1_DATABASE_ID` | Identificador de la base D1 |
+| `API_BASE_URL` | URL base de la API desplegada (solo referencia) |
+
+`npm run cf:config` genera `wrangler.generated.jsonc` a partir de `.env`. Ese archivo también está ignorado por git y es el que usan el despliegue y los comandos remotos.
+
+---
+
 ## Puesta en marcha
 
 ```bash
 npm install
+cp .env.example .env
+# completa los valores en .env
 npm run dev
 ```
 
-La API queda disponible en `http://localhost:8787/api`.
+El servidor de desarrollo escucha en el puerto `8787` y sirve la API bajo el prefijo `/api`.
 
 ### Base de datos
 
@@ -60,16 +80,15 @@ El seed crea la ubicación `WAREHOUSE` y los tipos de movimiento del MVP:
 npm run deploy
 ```
 
-La API está desplegada en:
+`npm run deploy` genera `wrangler.generated.jsonc` desde `.env` y despliega con esa configuración. La URL pública y el identificador de la base D1 no se guardan en el repositorio.
 
-- **Producción:** https://sistema-inventario.lifud-iberia.workers.dev
-- **Base D1:** `d1-local-con-drizzle` (`7454db87-2f84-4432-97c8-86ecc48bc974`, región WEUR)
-
-El binding `DB` de `wrangler.jsonc` ya apunta a esa base. Para aplicar migraciones al entorno remoto:
+Para aplicar migraciones al entorno remoto:
 
 ```bash
 npm run db:apply:remote
 ```
+
+Los comandos remotos también generan la configuración desde `.env` antes de ejecutarse.
 
 ### Tipos de Cloudflare
 
@@ -462,8 +481,12 @@ src/
 ├── types.ts               # Tipos de los bindings
 └── validators.ts          # Esquemas de validación con Zod
 drizzle/                   # Migraciones generadas
+scripts/
+└── generate-wrangler-config.mjs  # Genera la config de Wrangler desde .env
 seed.sql                   # Catálogos iniciales
 test.http                  # Ejemplos de peticiones
+.env.example               # Plantilla de variables de entorno (.env no se versiona)
+wrangler.generated.jsonc   # Config generada desde .env (no se versiona)
 ```
 
 ---

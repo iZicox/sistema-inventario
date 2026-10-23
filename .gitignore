@@ -17,8 +17,12 @@ node_modules/
 
 # env
 .env
+.env.example
 .env.production
 .dev.vars
+
+# config generada desde .env
+wrangler.generated.jsonc
 
 # logs
 logs/

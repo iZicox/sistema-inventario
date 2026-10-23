@@ -25,7 +25,8 @@
     {
       "binding": "DB",
       "database_name": "d1-local-con-drizzle",
-      "database_id": "7454db87-2f84-4432-97c8-86ecc48bc974",
+      // El database_id es privado: se inyecta desde .env en wrangler.generated.jsonc
+      // mediante `npm run cf:config` (lo ejecutan deploy y los comandos remotos).
       "migrations_dir": "drizzle"
     }
   ],

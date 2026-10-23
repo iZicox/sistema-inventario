@@ -8,6 +8,7 @@ import { idIntSchema, productLocationSchema, stockQuerySchema } from "../validat
 
 const stockRoute = new Hono<Env>()
 
+// campos comunes de los listados de stock
 const stockRowSelect = {
     productId: stock.productId,
     sku: product.sku,
@@ -22,10 +23,12 @@ stockRoute.get('/stock', zValidator('query', stockQuerySchema), async (c) => {
     const { productId, locationId } = c.req.valid('query')
     const db = getDb(c.env.DB)
 
+    // aplica solo los filtros recibidos
     const conditions = []
     if (productId !== undefined) conditions.push(eq(stock.productId, productId))
     if (locationId !== undefined) conditions.push(eq(stock.locationId, locationId))
 
+    // une producto y ubicacion; resultado: array de filas
     const rows = await db
         .select(stockRowSelect)
         .from(stock)
@@ -42,6 +45,7 @@ stockRoute.get('/stock/product/:id', zValidator('param', idIntSchema), async (c)
     const { id } = c.req.valid('param')
     const db = getDb(c.env.DB)
 
+    // verifica el producto; resultado: una fila o undefined
     const [productRow] = await db
         .select({ id: product.id, sku: product.sku })
         .from(product)
@@ -51,6 +55,7 @@ stockRoute.get('/stock/product/:id', zValidator('param', idIntSchema), async (c)
         return c.json({error: 'producto no existe'}, 404)
     }
 
+    // stock del producto en cada ubicacion; resultado: array
     const rows = await db
         .select({
             locationId: stock.locationId,
@@ -63,6 +68,7 @@ stockRoute.get('/stock/product/:id', zValidator('param', idIntSchema), async (c)
         .where(eq(stock.productId, id))
         .orderBy(asc(location.code))
 
+    // suma las cantidades de todas las ubicaciones
     const total = rows.reduce((sum, row) => sum + row.quantity, 0)
 
     return c.json({
@@ -78,6 +84,7 @@ stockRoute.get('/stock/location/:id', zValidator('param', idIntSchema), async (c
     const { id } = c.req.valid('param')
     const db = getDb(c.env.DB)
 
+    // verifica la ubicacion; resultado: una fila o undefined
     const [locationRow] = await db
         .select({ id: location.id, code: location.code })
         .from(location)
@@ -87,6 +94,7 @@ stockRoute.get('/stock/location/:id', zValidator('param', idIntSchema), async (c
         return c.json({error: 'ubicacion no existe'}, 404)
     }
 
+    // productos con stock en esa ubicacion; resultado: array
     const rows = await db
         .select({
             productId: stock.productId,
@@ -99,6 +107,7 @@ stockRoute.get('/stock/location/:id', zValidator('param', idIntSchema), async (c
         .where(eq(stock.locationId, id))
         .orderBy(asc(product.sku))
 
+    // suma las cantidades de todos los productos
     const total = rows.reduce((sum, row) => sum + row.quantity, 0)
 
     return c.json({
@@ -114,6 +123,7 @@ stockRoute.get('/stock/:productId/:locationId', zValidator('param', productLocat
     const { productId, locationId } = c.req.valid('param')
     const db = getDb(c.env.DB)
 
+    // verifica el producto; resultado: una fila o undefined
     const [productRow] = await db
         .select({ id: product.id, sku: product.sku })
         .from(product)
@@ -123,6 +133,7 @@ stockRoute.get('/stock/:productId/:locationId', zValidator('param', productLocat
         return c.json({error: 'producto no existe'}, 404)
     }
 
+    // verifica la ubicacion; resultado: una fila o undefined
     const [locationRow] = await db
         .select({ id: location.id, code: location.code })
         .from(location)
@@ -132,6 +143,7 @@ stockRoute.get('/stock/:productId/:locationId', zValidator('param', productLocat
         return c.json({error: 'ubicacion no existe'}, 404)
     }
 
+    // busca la fila exacta de stock; resultado: una fila o undefined
     const [row] = await db
         .select({
             quantity: stock.quantity,
@@ -145,8 +157,7 @@ stockRoute.get('/stock/:productId/:locationId', zValidator('param', productLocat
             )
         )
 
-    // Si no hay fila de stock se devuelve cero, no 404: la combinación
-    // producto–ubicación existe, simplemente no tiene stock registrado.
+    // si no hay fila devuelve cero, porque producto y ubicacion si existen
     return c.json({
         productId: productRow.id,
         sku: productRow.sku,
@@ -159,9 +170,10 @@ stockRoute.get('/stock/:productId/:locationId', zValidator('param', productLocat
 
 // reconstruye el stock desde el historial de movimientos
 stockRoute.post('/stock/recalculate', async (c) => {
-    // El batch de D1 es atómico: o se borra y reconstruye todo, o no cambia nada.
+    // el batch es atomico; resultado: array con el estado de cada sentencia
     await c.env.DB.batch([
         c.env.DB.prepare('DELETE FROM stock'),
+        // suma los movimientos usando el signo de su tipo
         c.env.DB.prepare(`
             INSERT INTO stock (product_id, location_id, quantity, updated_at)
             SELECT
@@ -177,6 +189,7 @@ stockRoute.post('/stock/recalculate', async (c) => {
 
     const db = getDb(c.env.DB)
 
+    // devuelve el stock ya reconstruido; resultado: array de filas
     const rows = await db
         .select(stockRowSelect)
         .from(stock)
