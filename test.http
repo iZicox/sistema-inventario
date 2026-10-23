@@ -1,9 +1,11 @@
 @urlBase = http://localhost:8787/api
 @contentType = application/json
 
-// Ajustá productId/locationId a los ids devueltos por los catálogos.
+// Ajustá productId/locationId/toLocationId a los ids devueltos por los catálogos.
+// La ubicación destino debe existir; el seed solo crea WAREHOUSE.
 @productId = 4
 @locationId = 1
+@toLocationId = 2
 
 // MOVEMENT TYPE
 
@@ -81,6 +83,20 @@ Content-Type: {{contentType}}
     "locationId": {{locationId}},
     "movementTypeCode": "EXIT",
     "quantity": 3
+}
+
+###
+
+// transferencia entre ubicaciones (409 si no hay stock suficiente en origen)
+POST {{urlBase}}/movements/transfer HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+    "productId": {{productId}},
+    "fromLocationId": {{locationId}},
+    "toLocationId": {{toLocationId}},
+    "quantity": 2,
+    "note": "traslado"
 }
 
 ###

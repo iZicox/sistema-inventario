@@ -36,5 +36,16 @@ export const createMovementSchema = z.object({
     note: z.string().max(500, "note admite como máximo 500 caracteres").optional()
 })
 
+export const transferSchema = z.object({
+    productId: z.coerce.number().int().positive(),
+    fromLocationId: z.coerce.number().int().positive(),
+    toLocationId: z.coerce.number().int().positive(),
+    quantity: z.coerce.number().int().positive(),
+    note: z.string().max(500, "note admite como máximo 500 caracteres").optional()
+}).refine((data) => data.fromLocationId !== data.toLocationId, {
+    message: "la ubicación de origen y destino deben ser distintas",
+    path: ["toLocationId"],
+})
+
 
 

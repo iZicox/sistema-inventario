@@ -154,6 +154,7 @@ Todas las rutas se montan bajo el prefijo `/api`.
 | `GET` | `/products/:sku` | Implementada | Obtiene un producto por SKU |
 | `DELETE` | `/products/:sku` | Implementada | Elimina un producto |
 | `POST` | `/movements` | Implementada | Crea un movimiento y actualiza el stock |
+| `POST` | `/movements/transfer` | Implementada | Registra una transferencia entre ubicaciones y actualiza el stock |
 | `GET` | `/movements` | Implementada | Lista el historial de movimientos |
 | `GET` | `/movements/:id` | Implementada | Obtiene un movimiento por id |
 | `GET` | `/movements/location/:id` | Implementada | Lista los movimientos de una ubicación |
@@ -163,7 +164,6 @@ Todas las rutas se montan bajo el prefijo `/api`.
 | `GET` | `/stock/location/:id` | Implementada | Consulta el stock de una ubicación |
 | `GET` | `/stock/:productId/:locationId` | Implementada | Consulta el stock de un producto en una ubicación |
 | `POST` | `/stock/recalculate` | Implementada | Reconstruye el stock desde el historial |
-| `POST` | `/movements/transfer` | Pendiente | Registra una transferencia entre ubicaciones |
 
 > Las rutas marcadas como «Pendiente» todavía no están implementadas. Consulta la sección [Estado actual y pendientes](#estado-actual-y-pendientes).
 
@@ -242,7 +242,7 @@ Borra un producto.
 
 ### `POST /movements`
 
-Es la ruta más importante: **la única que modifica el stock**.
+Es la ruta principal para registrar movimientos individuales y actualizar el stock. La otra ruta que modifica stock es `POST /movements/transfer`.
 
 Conceptualmente debe hacer esto:
 
@@ -263,6 +263,91 @@ Reglas:
 - Devuelve el movimiento creado y, opcionalmente, el stock resultante.
 
 Consideración: si el cliente reintenta la petición por un timeout, podría crear el movimiento dos veces. A futuro conviene un identificador de idempotencia, pero para el MVP basta con tenerlo presente.
+
+### `POST /movements/transfer`
+
+Registra un traslado de un producto entre dos ubicaciones.
+
+No crea un movimiento único: genera dos movimientos, `TRANSFER_OUT` en la ubicación de origen y `TRANSFER_IN` en la de destino, y actualiza el stock de ambas en un solo batch atómico de D1.
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "fromLocationId": 1,
+  "toLocationId": 2,
+  "quantity": 10,
+  "note": "traslado a tienda"
+}
+```
+
+`note` es opcional.
+
+El ejemplo usa las ubicaciones 1 y 2. Ambas deben existir; el seed actual solo crea `WAREHOUSE`, así que para probar un traslado hace falta cargar una segunda ubicación.
+
+Reglas:
+
+- `quantity` debe ser un entero positivo.
+- `fromLocationId` y `toLocationId` deben ser distintos.
+- El producto y ambas ubicaciones deben existir.
+- Debe haber stock suficiente en la ubicación de origen.
+- Si algo falla, no se registra ninguno de los dos movimientos ni se modifica el stock.
+
+Ejemplo:
+
+```bash
+curl -X POST http://localhost:8787/api/movements/transfer \
+  -H 'Content-Type: application/json' \
+  -d '{"productId":1,"fromLocationId":1,"toLocationId":2,"quantity":10}'
+```
+
+Respuesta `201`:
+
+```json
+{
+  "productId": 1,
+  "fromLocationId": 1,
+  "toLocationId": 2,
+  "quantity": 10,
+  "movementOut": {
+    "id": 2,
+    "productId": 1,
+    "locationId": 1,
+    "movementTypeCode": "TRANSFER_OUT",
+    "quantity": 10,
+    "note": "traslado a tienda",
+    "createdAt": "2026-10-23 12:00:00"
+  },
+  "movementIn": {
+    "id": 3,
+    "productId": 1,
+    "locationId": 2,
+    "movementTypeCode": "TRANSFER_IN",
+    "quantity": 10,
+    "note": "traslado a tienda",
+    "createdAt": "2026-10-23 12:00:00"
+  },
+  "stockFrom": {
+    "productId": 1,
+    "locationId": 1,
+    "quantity": 5,
+    "updatedAt": "2026-10-23 12:00:00"
+  },
+  "stockTo": {
+    "productId": 1,
+    "locationId": 2,
+    "quantity": 10,
+    "updatedAt": "2026-10-23 12:00:00"
+  }
+}
+```
+
+Errores:
+
+- `400`: origen y destino iguales o datos inválidos.
+- `404`: producto o ubicación inexistente.
+- `409`: stock insuficiente en la ubicación de origen.
 
 ### `GET /movements`
 
@@ -429,7 +514,7 @@ Una transferencia no es un tipo de movimiento único: conceptualmente son **dos 
 
 Ambos movimientos y ambas actualizaciones de stock deben ocurrir en una sola operación atómica. Si se hicieran con dos peticiones separadas y fallara la segunda, el stock quedaría descuadrado.
 
-Por eso, si van a existir transferencias reales, conviene una ruta propia del estilo `POST /movements/transfer` que registre las dos partes juntas. Para el MVP puede bastar con no exponer transferencias todavía.
+La ruta `POST /movements/transfer` implementa este caso: registra los dos movimientos y actualiza ambas filas de stock en un único batch atómico de D1. Si no hay stock suficiente en origen, no se guarda ningún cambio.
 
 ---
 
@@ -444,7 +529,7 @@ Por eso, si van a existir transferencias reales, conviene una ruta propia del es
 - Los errores deben tener significado: datos inválidos, no encontrado, conflicto por stock insuficiente, error interno.
 - Los listados deben estar ordenados y, sobre todo el historial, paginados.
 - Las rutas estáticas deben declararse antes que las rutas con parámetros para evitar ambigüedades.
-- Las escrituras (crear movimientos, crear productos, recalcular stock) deberían estar protegidas.
+- Las escrituras (crear movimientos, transferencias, crear productos, recalcular stock) deberían estar protegidas.
 
 En resumen: `movements` cuenta **qué pasó**; `stock` responde **cuánto hay ahora**. Las rutas de movimientos no deberían calcular stock, y las de stock no deberían inventar movimientos.
 
@@ -496,6 +581,7 @@ wrangler.generated.jsonc   # Config generada desde .env (no se versiona)
 Implementado:
 
 - `POST /movements` registra el movimiento y actualiza el stock en un único batch atómico de D1. Si el stock quedaría negativo, el `CHECK` de la tabla aborta el batch completo y se responde `409`.
+- `POST /movements/transfer` registra `TRANSFER_OUT` y `TRANSFER_IN` y actualiza ambas ubicaciones en un batch atómico. Responde `409` si no hay stock suficiente en origen.
 - `stock.quantity` tiene `CHECK (quantity >= 0)` y `movement.quantity` tiene `CHECK (quantity > 0)`.
 - `GET /movements/:id` devuelve un objeto y responde `404` si no existe.
 - `GET /movements/location/:id` valida la ubicación y devuelve el historial ordenado.
@@ -513,7 +599,6 @@ Pendiente:
 
 - `GET /movements/product/:id`.
 - Filtros y paginación en los listados de movimientos.
-- `POST /movements/transfer`.
 - Idempotencia en `POST /movements` para reintentos del cliente.
 - Proteger las escrituras y `POST /stock/recalculate` con autenticación.
 - Unificar `movement.movementTypeCode` a snake_case (`movement_type_code`) en una migración futura.
